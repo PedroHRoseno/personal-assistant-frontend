@@ -23,8 +23,8 @@ const links = [
     icon: BookOpenCheck,
   },
   {
-    label: "Casa",
-    href: "/casa",
+    label: "Pessoal/Casa",
+    href: "/pessoal/casa",
     icon: ClipboardList,
   },
 ];

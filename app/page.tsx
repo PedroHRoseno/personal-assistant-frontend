@@ -29,7 +29,7 @@ const typeStyles: Record<TodayTask["task_type"], string> = {
 const typeLabel: Record<TodayTask["task_type"], string> = {
   work: "Trabalho",
   study: "Estudos",
-  home: "Casa",
+  home: "Pessoal/Casa",
 };
 
 const typeIcon = {
@@ -341,7 +341,7 @@ export default function HomePage() {
 
           <Card className="h-fit xl:sticky xl:top-4">
             <CardHeader>
-              <CardTitle>Checklist Rápido do Lar</CardTitle>
+              <CardTitle>Checklist Rápido Pessoal/Casa</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {quickHomeChecklist.map((task) => (

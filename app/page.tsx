@@ -1,0 +1,313 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { Briefcase, GraduationCap, Home as HomeIcon } from "lucide-react";
+import { DayPicker } from "react-day-picker";
+
+import { AppShell } from "@/components/layout/app-shell";
+import { AnimatedCheckItem } from "@/components/ui/animated-check-item";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiFetch } from "@/lib/api";
+import { celebrateTaskCompletion } from "@/lib/celebration";
+import type { HomeChecklistWidgetItem, TodayTask } from "@/lib/types";
+
+const columns = [
+  { key: "backlog", label: "Backlog" },
+  { key: "em_fazendo", label: "Em Fazendo" },
+  { key: "concluido", label: "Concluído" },
+] as const;
+
+const typeStyles: Record<TodayTask["task_type"], string> = {
+  work: "border-emerald-700/60 bg-emerald-500/10 text-emerald-300",
+  study: "border-indigo-700/60 bg-indigo-500/10 text-indigo-300",
+  home: "border-amber-700/60 bg-amber-500/10 text-amber-300",
+};
+
+const typeLabel: Record<TodayTask["task_type"], string> = {
+  work: "Trabalho",
+  study: "Estudos",
+  home: "Casa",
+};
+
+const typeIcon = {
+  work: Briefcase,
+  study: GraduationCap,
+  home: HomeIcon,
+};
+
+function getLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export default function HomePage() {
+  const [items, setItems] = useState<TodayTask[]>([]);
+  const [homeChecklist, setHomeChecklist] = useState<HomeChecklistWidgetItem[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [draggedTask, setDraggedTask] = useState<Pick<TodayTask, "id" | "task_type"> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const grouped = useMemo(() => {
+    return {
+      backlog: items.filter((task) => task.status === "backlog"),
+      em_fazendo: items.filter((task) => task.status === "em_fazendo"),
+      concluido: items.filter((task) => task.status === "concluido"),
+    };
+  }, [items]);
+
+  const dueDateMap = useMemo(() => {
+    const map = new Map<string, TodayTask[]>();
+    for (const task of items) {
+      if (!task.due_date) continue;
+      const list = map.get(task.due_date) ?? [];
+      list.push(task);
+      map.set(task.due_date, list);
+    }
+    return map;
+  }, [items]);
+
+  const dueDays = useMemo(
+    () =>
+      Array.from(dueDateMap.keys()).map((value) => {
+        const [year, month, day] = value.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      }),
+    [dueDateMap],
+  );
+
+  const selectedDateTasks = useMemo(() => {
+    if (!selectedDate) return [];
+    const key = getLocalDateKey(selectedDate);
+    return dueDateMap.get(key) ?? [];
+  }, [selectedDate, dueDateMap]);
+
+  useEffect(() => {
+    async function loadAllTasks() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiFetch<TodayTask[]>("/tasks/all");
+        setItems(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Falha ao carregar tarefas.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAllTasks();
+  }, []);
+
+  useEffect(() => {
+    async function loadHomeChecklist() {
+      try {
+        const data = await apiFetch<HomeChecklistWidgetItem[]>("/home-tasks/checklist-today");
+        setHomeChecklist(data);
+      } catch {}
+    }
+    loadHomeChecklist();
+  }, []);
+
+  async function toggleHomeChecklistTask(task: HomeChecklistWidgetItem) {
+    try {
+      await apiFetch(`/home-tasks/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(
+          task.task_type === "diaria"
+            ? { is_completed_today: !task.is_completed_today, status: !task.is_completed_today ? "concluido" : "backlog" }
+            : { status: "concluido" },
+        ),
+      });
+      const updated = await apiFetch<HomeChecklistWidgetItem[]>("/home-tasks/checklist-today");
+      setHomeChecklist(updated);
+      const allTasks = await apiFetch<TodayTask[]>("/tasks/all");
+      setItems(allTasks);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao atualizar checklist do lar.");
+    }
+  }
+
+  async function updateTaskStatus(task: TodayTask, newStatus: TodayTask["status"]) {
+    if (task.status === newStatus) return;
+
+    setItems((prev) =>
+      prev.map((entry) => (entry.id === task.id && entry.task_type === task.task_type ? { ...entry, status: newStatus } : entry)),
+    );
+
+    const endpoint =
+      task.task_type === "work"
+        ? `/work-tasks/${task.id}`
+        : task.task_type === "study"
+          ? `/study-tasks/${task.id}`
+          : `/home-tasks/${task.id}`;
+
+    try {
+      await apiFetch(endpoint, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (newStatus === "concluido" && task.status !== "concluido") {
+        if (task.task_type === "work") celebrateTaskCompletion("work");
+        if (task.task_type === "study") celebrateTaskCompletion("study");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao atualizar status.");
+      setItems((prev) =>
+        prev.map((entry) => (entry.id === task.id && entry.task_type === task.task_type ? { ...entry, status: task.status } : entry)),
+      );
+    }
+  }
+
+  return (
+    <AppShell>
+      <header className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-100 md:text-3xl">Central de Execução</h2>
+        <p className="mt-2 text-sm text-slate-400 md:text-base">
+          Kanban unificado no topo e calendário de vencimentos abaixo.
+        </p>
+      </header>
+
+      {error ? <p className="mb-4 text-sm text-rose-400">{error}</p> : null}
+      {loading ? <p className="mb-4 text-sm text-slate-400">Carregando tarefas...</p> : null}
+
+      <section className="mb-8">
+        <div className="grid gap-4 lg:grid-cols-3">
+          {columns.map((column) => (
+            <Card
+              key={column.key}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (!draggedTask) return;
+                const task = items.find(
+                  (entry) => entry.id === draggedTask.id && entry.task_type === draggedTask.task_type,
+                );
+                if (task) {
+                  updateTaskStatus(task, column.key);
+                }
+                setDraggedTask(null);
+              }}
+            >
+              <CardHeader>
+                <CardTitle>{column.label}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {grouped[column.key].map((task) => {
+                  const Icon = typeIcon[task.task_type];
+                  return (
+                    <motion.article
+                      key={`${task.task_type}-${task.id}`}
+                      layout
+                      layoutId={`task-${task.task_type}-${task.id}`}
+                      draggable
+                      onDragStart={() => setDraggedTask({ id: task.id, task_type: task.task_type })}
+                      onDragEnd={() => setDraggedTask(null)}
+                      className={`rounded-lg border border-slate-800/90 bg-slate-900/50 p-3 backdrop-blur-md transition ${
+                        draggedTask?.id === task.id && draggedTask?.task_type === task.task_type
+                          ? "rotate-[2deg] shadow-2xl shadow-indigo-500/30"
+                          : ""
+                      } ${
+                        task.priority ? "ring-1 ring-violet-500/40 shadow-[0_0_16px_rgba(139,92,246,0.3)] animate-pulse" : ""
+                      }`}
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge className={typeStyles[task.task_type]}>
+                          <Icon size={12} />
+                          {typeLabel[task.task_type]}
+                        </Badge>
+                        {task.priority ? <Badge variant="priority">Prioridade</Badge> : null}
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-slate-100">{task.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">{task.due_date ?? "Sem prazo"}</p>
+                    </motion.article>
+                  );
+                })}
+                {grouped[column.key].length === 0 ? (
+                  <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-500">
+                    Sem tarefas nesta coluna.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Calendário de Vencimentos</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-6 xl:grid-cols-2">
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+              <DayPicker
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                modifiers={{ due: dueDays }}
+                modifiersClassNames={{ due: "bg-indigo-500/30 text-indigo-100 rounded-full" }}
+              />
+            </div>
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-200">
+                {selectedDate
+                  ? `Tarefas em ${selectedDate.toLocaleDateString("pt-BR")}`
+                  : "Selecione um dia"}
+              </h3>
+              <div className="space-y-2">
+                {selectedDateTasks.map((task) => {
+                  const Icon = typeIcon[task.task_type];
+                  return (
+                    <div key={`${task.task_type}-${task.id}`} className="rounded-md border border-slate-800 p-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className={typeStyles[task.task_type]}>
+                          <Icon size={12} />
+                          {typeLabel[task.task_type]}
+                        </Badge>
+                        <span className="text-xs text-slate-500">{task.status.replace("_", " ")}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-200">{task.title}</p>
+                    </div>
+                  );
+                })}
+                {selectedDateTasks.length === 0 ? (
+                  <p className="text-sm text-slate-500">Nenhuma tarefa com vencimento neste dia.</p>
+                ) : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Checklist do Lar</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {homeChecklist.map((task) => (
+              <AnimatedCheckItem
+                key={task.id}
+                checked={task.task_type === "diaria" ? task.is_completed_today : false}
+                onToggle={() => toggleHomeChecklistTask(task)}
+                title={task.title}
+                actions={
+                  <Badge className="border-amber-700/60 bg-amber-500/10 text-amber-300">
+                    {task.task_type}
+                  </Badge>
+                }
+              />
+            ))}
+            {homeChecklist.length === 0 ? (
+              <p className="text-sm text-slate-500">Nenhuma pendência do lar para hoje.</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      </section>
+    </AppShell>
+  );
+}

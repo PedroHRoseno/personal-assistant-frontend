@@ -2,20 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, GraduationCap, Home as HomeIcon } from "lucide-react";
+import { Briefcase, GraduationCap, Home as HomeIcon, Pencil } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { TaskEditModal } from "@/components/tasks/task-edit-modal";
 import { AnimatedCheckItem } from "@/components/ui/animated-check-item";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { celebrateTaskCompletion } from "@/lib/celebration";
-import type { HomeChecklistWidgetItem, TodayTask } from "@/lib/types";
+import type { HomeChecklistWidgetItem, HomeTask, StudyTask, TodayTask, WorkTask } from "@/lib/types";
 
 const columns = [
   { key: "backlog", label: "Backlog" },
-  { key: "em_fazendo", label: "Em Fazendo" },
+  { key: "em_fazendo", label: "Em progresso" },
   { key: "concluido", label: "Concluído" },
 ] as const;
 
@@ -49,16 +50,28 @@ export default function HomePage() {
   const [homeChecklist, setHomeChecklist] = useState<HomeChecklistWidgetItem[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [draggedTask, setDraggedTask] = useState<Pick<TodayTask, "id" | "task_type"> | null>(null);
+  const [editingTask, setEditingTask] = useState<
+    | { task_type: "work"; task: Pick<WorkTask, "id" | "title" | "description" | "priority" | "due_date"> }
+    | { task_type: "study"; task: Pick<StudyTask, "id" | "title" | "description" | "priority" | "due_date"> }
+    | { task_type: "home"; task: Pick<HomeTask, "id" | "title" | "description" | "priority" | "due_date"> }
+    | null
+  >(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const kanbanItems = useMemo(
+    () => items.filter((task) => task.task_type === "work" || task.task_type === "study"),
+    [items],
+  );
+
   const grouped = useMemo(() => {
     return {
-      backlog: items.filter((task) => task.status === "backlog"),
-      em_fazendo: items.filter((task) => task.status === "em_fazendo"),
-      concluido: items.filter((task) => task.status === "concluido"),
+      backlog: kanbanItems.filter((task) => task.status === "backlog"),
+      em_fazendo: kanbanItems.filter((task) => task.status === "em_fazendo"),
+      concluido: kanbanItems.filter((task) => task.status === "concluido"),
     };
-  }, [items]);
+  }, [kanbanItems]);
 
   const dueDateMap = useMemo(() => {
     const map = new Map<string, TodayTask[]>();
@@ -85,6 +98,8 @@ export default function HomePage() {
     const key = getLocalDateKey(selectedDate);
     return dueDateMap.get(key) ?? [];
   }, [selectedDate, dueDateMap]);
+
+  const quickHomeChecklist = useMemo(() => homeChecklist, [homeChecklist]);
 
   useEffect(() => {
     async function loadAllTasks() {
@@ -162,6 +177,79 @@ export default function HomePage() {
     }
   }
 
+  async function refreshHomeData() {
+    const [allTasks, checklist] = await Promise.all([
+      apiFetch<TodayTask[]>("/tasks/all"),
+      apiFetch<HomeChecklistWidgetItem[]>("/home-tasks/checklist-today"),
+    ]);
+    setItems(allTasks);
+    setHomeChecklist(checklist);
+  }
+
+  async function openTaskEditor(task: TodayTask) {
+    try {
+      if (task.task_type === "work") {
+        const full = await apiFetch<WorkTask>(`/work-tasks/${task.id}`);
+        setEditingTask({
+          task_type: "work",
+          task: {
+            id: full.id,
+            title: full.title,
+            description: full.description,
+            priority: full.priority,
+            due_date: full.due_date,
+          },
+        });
+      } else if (task.task_type === "study") {
+        const full = await apiFetch<StudyTask>(`/study-tasks/${task.id}`);
+        setEditingTask({
+          task_type: "study",
+          task: {
+            id: full.id,
+            title: full.title,
+            description: full.description,
+            priority: full.priority,
+            due_date: full.due_date,
+          },
+        });
+      } else {
+        const full = await apiFetch<HomeTask>(`/home-tasks/${task.id}`);
+        setEditingTask({
+          task_type: "home",
+          task: {
+            id: full.id,
+            title: full.title,
+            description: full.description,
+            priority: full.priority,
+            due_date: full.due_date,
+          },
+        });
+      }
+      setTaskModalOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao abrir editor de tarefa.");
+    }
+  }
+
+  async function openHomeChecklistEditor(taskId: number) {
+    try {
+      const full = await apiFetch<HomeTask>(`/home-tasks/${taskId}`);
+      setEditingTask({
+        task_type: "home",
+        task: {
+          id: full.id,
+          title: full.title,
+          description: full.description,
+          priority: full.priority,
+          due_date: full.due_date,
+        },
+      });
+      setTaskModalOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao abrir editor de tarefa.");
+    }
+  }
+
   return (
     <AppShell>
       <header className="mb-6">
@@ -175,65 +263,112 @@ export default function HomePage() {
       {loading ? <p className="mb-4 text-sm text-slate-400">Carregando tarefas...</p> : null}
 
       <section className="mb-8">
-        <div className="grid gap-4 lg:grid-cols-3">
-          {columns.map((column) => (
-            <Card
-              key={column.key}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => {
-                if (!draggedTask) return;
-                const task = items.find(
-                  (entry) => entry.id === draggedTask.id && entry.task_type === draggedTask.task_type,
-                );
-                if (task) {
-                  updateTaskStatus(task, column.key);
-                }
-                setDraggedTask(null);
-              }}
-            >
-              <CardHeader>
-                <CardTitle>{column.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {grouped[column.key].map((task) => {
-                  const Icon = typeIcon[task.task_type];
-                  return (
-                    <motion.article
-                      key={`${task.task_type}-${task.id}`}
-                      layout
-                      layoutId={`task-${task.task_type}-${task.id}`}
-                      draggable
-                      onDragStart={() => setDraggedTask({ id: task.id, task_type: task.task_type })}
-                      onDragEnd={() => setDraggedTask(null)}
-                      className={`rounded-lg border border-slate-800/90 bg-slate-900/50 p-3 backdrop-blur-md transition ${
-                        draggedTask?.id === task.id && draggedTask?.task_type === task.task_type
-                          ? "rotate-[2deg] shadow-2xl shadow-indigo-500/30"
-                          : ""
-                      } ${
-                        task.priority ? "ring-1 ring-violet-500/40 shadow-[0_0_16px_rgba(139,92,246,0.3)] animate-pulse" : ""
-                      }`}
-                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Badge className={typeStyles[task.task_type]}>
-                          <Icon size={12} />
-                          {typeLabel[task.task_type]}
-                        </Badge>
-                        {task.priority ? <Badge variant="priority">Prioridade</Badge> : null}
-                      </div>
-                      <p className="mt-2 text-sm font-semibold text-slate-100">{task.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">{task.due_date ?? "Sem prazo"}</p>
-                    </motion.article>
-                  );
-                })}
-                {grouped[column.key].length === 0 ? (
-                  <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-500">
-                    Sem tarefas nesta coluna.
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid gap-4 xl:grid-cols-4">
+          <div className="xl:col-span-3">
+            <div className="grid gap-4 lg:grid-cols-3">
+              {columns.map((column) => (
+                <Card
+                  key={column.key}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    if (!draggedTask) return;
+                    const task = kanbanItems.find(
+                      (entry) => entry.id === draggedTask.id && entry.task_type === draggedTask.task_type,
+                    );
+                    if (task) {
+                      updateTaskStatus(task, column.key);
+                    }
+                    setDraggedTask(null);
+                  }}
+                >
+                  <CardHeader>
+                    <CardTitle>{column.label}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {grouped[column.key].map((task) => {
+                      const Icon = typeIcon[task.task_type];
+                      return (
+                        <motion.article
+                          key={`${task.task_type}-${task.id}`}
+                          layout
+                          layoutId={`task-${task.task_type}-${task.id}`}
+                          draggable
+                          onDragStart={() => setDraggedTask({ id: task.id, task_type: task.task_type })}
+                          onDragEnd={() => setDraggedTask(null)}
+                          className={`rounded-lg border border-slate-800/90 bg-slate-900/50 p-3 backdrop-blur-md transition ${
+                            draggedTask?.id === task.id && draggedTask?.task_type === task.task_type
+                              ? "rotate-[2deg] shadow-2xl shadow-indigo-500/30"
+                              : ""
+                          } ${
+                            task.priority
+                              ? "ring-1 ring-violet-500/40 shadow-[0_0_16px_rgba(139,92,246,0.3)] animate-pulse"
+                              : ""
+                          }`}
+                          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Badge className={typeStyles[task.task_type]}>
+                              <Icon size={12} />
+                              {typeLabel[task.task_type]}
+                            </Badge>
+                            {task.priority ? <Badge variant="priority">Prioridade</Badge> : null}
+                          </div>
+                          <p className="mt-2 text-sm font-semibold text-slate-100">{task.title}</p>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <p className="text-xs text-slate-500">{task.due_date ?? "Sem prazo"}</p>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-indigo-300"
+                              onClick={() => openTaskEditor(task)}
+                            >
+                              <Pencil size={12} />
+                              Editar
+                            </button>
+                          </div>
+                        </motion.article>
+                      );
+                    })}
+                    {grouped[column.key].length === 0 ? (
+                      <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-500">
+                        Sem tarefas nesta coluna.
+                      </p>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <Card className="h-fit xl:sticky xl:top-4">
+            <CardHeader>
+              <CardTitle>Checklist Rápido do Lar</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {quickHomeChecklist.map((task) => (
+                <AnimatedCheckItem
+                  key={task.id}
+                  checked={false}
+                  onToggle={() => toggleHomeChecklistTask(task)}
+                  title={task.title}
+                  actions={
+                    <div className="flex items-center gap-1">
+                      <Badge className="border-amber-700/60 bg-amber-500/10 text-amber-300">{task.task_type}</Badge>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-indigo-300"
+                        onClick={() => openHomeChecklistEditor(task.id)}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </div>
+                  }
+                />
+              ))}
+              {quickHomeChecklist.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhuma pendência do lar para hoje.</p>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
       </section>
 
@@ -263,12 +398,22 @@ export default function HomePage() {
                   const Icon = typeIcon[task.task_type];
                   return (
                     <div key={`${task.task_type}-${task.id}`} className="rounded-md border border-slate-800 p-2">
-                      <div className="flex items-center gap-2">
-                        <Badge className={typeStyles[task.task_type]}>
-                          <Icon size={12} />
-                          {typeLabel[task.task_type]}
-                        </Badge>
-                        <span className="text-xs text-slate-500">{task.status.replace("_", " ")}</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className={typeStyles[task.task_type]}>
+                            <Icon size={12} />
+                            {typeLabel[task.task_type]}
+                          </Badge>
+                          <span className="text-xs text-slate-500">{task.status.replace("_", " ")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-indigo-300"
+                          onClick={() => openTaskEditor(task)}
+                        >
+                          <Pencil size={12} />
+                          Editar
+                        </button>
                       </div>
                       <p className="mt-1 text-sm text-slate-200">{task.title}</p>
                     </div>
@@ -283,31 +428,15 @@ export default function HomePage() {
         </Card>
       </section>
 
-      <section className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Checklist do Lar</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {homeChecklist.map((task) => (
-              <AnimatedCheckItem
-                key={task.id}
-                checked={task.task_type === "diaria" ? task.is_completed_today : false}
-                onToggle={() => toggleHomeChecklistTask(task)}
-                title={task.title}
-                actions={
-                  <Badge className="border-amber-700/60 bg-amber-500/10 text-amber-300">
-                    {task.task_type}
-                  </Badge>
-                }
-              />
-            ))}
-            {homeChecklist.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhuma pendência do lar para hoje.</p>
-            ) : null}
-          </CardContent>
-        </Card>
-      </section>
+      <TaskEditModal
+        open={taskModalOpen}
+        onOpenChange={(open) => {
+          setTaskModalOpen(open);
+          if (!open) setEditingTask(null);
+        }}
+        editableTask={editingTask}
+        onSaved={refreshHomeData}
+      />
     </AppShell>
   );
 }

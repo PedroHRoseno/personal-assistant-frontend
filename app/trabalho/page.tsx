@@ -10,6 +10,11 @@ import { apiFetch } from "@/lib/api";
 import type { WorkHub } from "@/lib/types";
 
 const iconMap = [BriefcaseBusiness, Factory, ShieldCheck];
+const displayNameMap: Record<string, string> = {
+  "Software Dev": "Software Dev",
+  "Produção ALMotos": "Conteúdo ALMotos",
+  "Gestão/Admin": "Admin",
+};
 
 export default function TrabalhoPage() {
   const [hubs, setHubs] = useState<WorkHub[]>([]);
@@ -46,7 +51,7 @@ export default function TrabalhoPage() {
                   <div className="mb-2 inline-flex w-fit rounded-md border border-slate-700 p-2 text-slate-300">
                     <Icon size={18} />
                   </div>
-                  <CardTitle>{hub.name}</CardTitle>
+                  <CardTitle>{displayNameMap[hub.name] ?? hub.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-slate-400">
                   {hub.description || "Sem descrição cadastrada."}

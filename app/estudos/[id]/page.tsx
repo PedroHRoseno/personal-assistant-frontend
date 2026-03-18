@@ -7,6 +7,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { TaskEditModal } from "@/components/tasks/task-edit-modal";
 import { AnimatedCheckItem } from "@/components/ui/animated-check-item";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ export default function CourseDetailsPage() {
   const [courseDialogOpen, setCourseDialogOpen] = useState(false);
   const [newTaskDialogOpen, setNewTaskDialogOpen] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<StudyTask | null>(null);
+  const [editingTask, setEditingTask] = useState<StudyTask | null>(null);
 
   const [editCourseTitle, setEditCourseTitle] = useState("");
   const [editCourseDescription, setEditCourseDescription] = useState("");
@@ -43,9 +44,6 @@ export default function CourseDetailsPage() {
   const [newTaskPriority, setNewTaskPriority] = useState<StudyTask["priority"]>("Média");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
 
-  const [editTaskTitle, setEditTaskTitle] = useState("");
-  const [editTaskPriority, setEditTaskPriority] = useState<StudyTask["priority"]>("Média");
-  const [editTaskDueDate, setEditTaskDueDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -178,32 +176,8 @@ export default function CourseDetailsPage() {
     }
   }
 
-  async function saveTaskEdit() {
-    if (!selectedTask) return;
-    try {
-      await apiFetch<StudyTask>(`/study-tasks/${selectedTask.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          title: editTaskTitle.trim(),
-          priority: editTaskPriority,
-          due_date: editTaskDueDate ? new Date(editTaskDueDate).toISOString() : null,
-        }),
-      });
-      setTaskDialogOpen(false);
-      setSelectedTask(null);
-      if (courseId) {
-        await loadData(courseId);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao editar tarefa.");
-    }
-  }
-
   function openTaskEditor(task: StudyTask) {
-    setSelectedTask(task);
-    setEditTaskTitle(task.title);
-    setEditTaskPriority(task.priority);
-    setEditTaskDueDate(task.due_date ? task.due_date.slice(0, 16) : "");
+    setEditingTask(task);
     setTaskDialogOpen(true);
   }
 
@@ -349,6 +323,7 @@ export default function CourseDetailsPage() {
                       {task.priority}
                     </Badge>
                     <Button variant="outline" onClick={() => openTaskEditor(task)}>
+                      <Pencil size={14} />
                       Editar
                     </Button>
                   </div>
@@ -528,38 +503,32 @@ export default function CourseDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Tarefa</DialogTitle>
-            <DialogDescription>Atualize os dados da tarefa selecionada.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <input
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-              placeholder="Titulo"
-              value={editTaskTitle}
-              onChange={(event) => setEditTaskTitle(event.target.value)}
-            />
-            <select
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-              value={editTaskPriority}
-              onChange={(event) => setEditTaskPriority(event.target.value as StudyTask["priority"])}
-            >
-              <option value="Alta">Alta</option>
-              <option value="Média">Média</option>
-              <option value="Baixa">Baixa</option>
-            </select>
-            <DatePicker value={editTaskDueDate} onChange={setEditTaskDueDate} />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setTaskDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={saveTaskEdit}>Salvar</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <TaskEditModal
+        open={taskDialogOpen}
+        onOpenChange={(open) => {
+          setTaskDialogOpen(open);
+          if (!open) setEditingTask(null);
+        }}
+        editableTask={
+          editingTask
+            ? {
+                task_type: "study",
+                task: {
+                  id: editingTask.id,
+                  title: editingTask.title,
+                  description: editingTask.description,
+                  priority: editingTask.priority,
+                  due_date: editingTask.due_date,
+                },
+              }
+            : null
+        }
+        onSaved={() => {
+          if (courseId) {
+            loadData(courseId);
+          }
+        }}
+      />
     </AppShell>
   );
 }

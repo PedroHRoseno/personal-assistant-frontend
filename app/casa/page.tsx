@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { TaskEditModal } from "@/components/tasks/task-edit-modal";
 import { AnimatedCheckItem } from "@/components/ui/animated-check-item";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +29,8 @@ export default function CasaPage() {
   const [zone, setZone] = useState("");
   const [intervalDays, setIntervalDays] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [editingTask, setEditingTask] = useState<HomeTask | null>(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -144,9 +148,21 @@ export default function CasaPage() {
                   : undefined
             }
             actions={
-              <Button variant="ghost" className="h-7 px-2 text-xs text-rose-400" onClick={() => removeTask(task.id)}>
-                Excluir
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-slate-300"
+                  onClick={() => {
+                    setEditingTask(task);
+                    setTaskModalOpen(true);
+                  }}
+                >
+                  <Pencil size={14} />
+                </Button>
+                <Button variant="ghost" className="h-7 px-2 text-xs text-rose-400" onClick={() => removeTask(task.id)}>
+                  <Trash2 size={14} />
+                </Button>
+              </div>
             }
           />
         ))}
@@ -247,6 +263,29 @@ export default function CasaPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <TaskEditModal
+        open={taskModalOpen}
+        onOpenChange={(open) => {
+          setTaskModalOpen(open);
+          if (!open) setEditingTask(null);
+        }}
+        editableTask={
+          editingTask
+            ? {
+                task_type: "home",
+                task: {
+                  id: editingTask.id,
+                  title: editingTask.title,
+                  description: editingTask.description,
+                  priority: editingTask.priority,
+                  due_date: editingTask.due_date,
+                },
+              }
+            : null
+        }
+        onSaved={loadTasks}
+      />
     </AppShell>
   );
 }

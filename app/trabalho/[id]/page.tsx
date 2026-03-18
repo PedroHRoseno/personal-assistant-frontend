@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { Link2, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { TaskEditModal } from "@/components/tasks/task-edit-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api";
 import type { WorkHub, WorkHubLink, WorkTask } from "@/lib/types";
 
@@ -19,6 +22,12 @@ function mapHubToContext(name?: string): WorkTask["context"] {
   if (normalized.includes("almotos") || normalized.includes("producao")) return "almotos";
   if (normalized.includes("gestao") || normalized.includes("admin")) return "gestao_admin";
   return "programacao";
+}
+
+function mapHubToLabel(name?: string): WorkTask["label"] {
+  if (!name) return "dev";
+  const normalized = name.toLowerCase();
+  return normalized.includes("almotos") || normalized.includes("conteudo") ? "conteudo" : "dev";
 }
 
 function formatDueLabel(dueDate: string | null) {
@@ -43,10 +52,15 @@ export default function WorkHubPage() {
   const [tasks, setTasks] = useState<WorkTask[]>([]);
 
   const [notes, setNotes] = useState("");
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<WorkTask | null>(null);
+
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
-
   const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
   const [taskPriority, setTaskPriority] = useState<LocalPriority>("Média");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +112,7 @@ export default function WorkHubPage() {
       setHub((prev) => (prev ? { ...prev, links: [created, ...prev.links] } : prev));
       setLinkTitle("");
       setLinkUrl("");
+      setLinkDialogOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao adicionar link.");
     }
@@ -120,19 +135,31 @@ export default function WorkHubPage() {
         method: "POST",
         body: JSON.stringify({
           title: taskTitle.trim(),
+          description: taskDescription.trim() || null,
           context: mapHubToContext(hub?.name),
           context_id: hubId,
-          label: "dev",
+          label: mapHubToLabel(hub?.name),
           priority: taskPriority === "Alta",
           due_date: taskDueDate ? new Date(taskDueDate).toISOString() : null,
         }),
       });
       setTasks((prev) => [created, ...prev]);
       setTaskTitle("");
+      setTaskDescription("");
       setTaskPriority("Média");
       setTaskDueDate("");
+      setTaskDialogOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao criar tarefa.");
+    }
+  }
+
+  async function removeTask(taskId: number) {
+    try {
+      await apiFetch<void>(`/work-tasks/${taskId}`, { method: "DELETE" });
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao excluir tarefa.");
     }
   }
 
@@ -176,53 +203,123 @@ export default function WorkHubPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Links Úteis</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-2">
-              <input
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                placeholder="Nome"
-                value={linkTitle}
-                onChange={(event) => setLinkTitle(event.target.value)}
-              />
-              <input
-                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                placeholder="URL"
-                value={linkUrl}
-                onChange={(event) => setLinkUrl(event.target.value)}
-              />
-              <Button onClick={addLink}>Salvar link</Button>
-            </div>
-            <div className="space-y-2">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle>Links Úteis</CardTitle>
+              <Button className="h-8 px-2" variant="outline" onClick={() => setLinkDialogOpen(true)}>
+                <Plus size={14} />
+                Novo Link
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
               {(hub?.links ?? []).map((link) => (
-                <div key={link.id} className="rounded-md border border-slate-800 p-2">
-                  <a href={link.url} target="_blank" rel="noreferrer" className="text-sm text-indigo-300 hover:underline">
+                <div key={link.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-800 p-2">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-indigo-300 hover:underline"
+                  >
+                    <Link2 size={14} />
                     {link.title}
                   </a>
-                  <Button variant="ghost" className="mt-1 h-7 px-2 text-xs text-rose-400" onClick={() => removeLink(link.id)}>
-                    Remover
+                  <Button variant="ghost" className="h-7 px-2 text-xs text-rose-400" onClick={() => removeLink(link.id)}>
+                    <Trash2 size={14} />
                   </Button>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
+              {(hub?.links ?? []).length === 0 ? <p className="text-sm text-slate-500">Sem links cadastrados.</p> : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle>Tarefas do Contexto</CardTitle>
+              <Button className="h-8 px-2" variant="outline" onClick={() => setTaskDialogOpen(true)}>
+                <Plus size={14} />
+                Nova Tarefa
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {sortedTasks.map((task) => (
+                <div key={task.id} className="rounded-md border border-slate-800 p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm text-slate-100">{task.title}</p>
+                      <p className="text-xs text-slate-500">{formatDueLabel(task.due_date)}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-slate-300"
+                        onClick={() => {
+                          setEditingTask(task);
+                          setEditDialogOpen(true);
+                        }}
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button variant="ghost" className="h-7 px-2 text-xs text-rose-400" onClick={() => removeTask(task.id)}>
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {sortedTasks.length === 0 ? <p className="text-sm text-slate-500">Sem tarefas neste contexto.</p> : null}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Tarefas do Contexto</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2 lg:grid-cols-4">
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Link</DialogTitle>
+            <DialogDescription>Adicione um link útil para este contexto.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
             <input
               className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-              placeholder="Nova tarefa"
+              placeholder="Nome"
+              value={linkTitle}
+              onChange={(event) => setLinkTitle(event.target.value)}
+            />
+            <input
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              placeholder="URL"
+              value={linkUrl}
+              onChange={(event) => setLinkUrl(event.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setLinkDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={addLink}>Salvar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nova Tarefa</DialogTitle>
+            <DialogDescription>Crie uma tarefa para este hub de trabalho.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <input
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              placeholder="Título"
               value={taskTitle}
               onChange={(event) => setTaskTitle(event.target.value)}
+            />
+            <textarea
+              className="h-20 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              placeholder="Descrição"
+              value={taskDescription}
+              onChange={(event) => setTaskDescription(event.target.value)}
             />
             <select
               className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
@@ -234,22 +331,42 @@ export default function WorkHubPage() {
               <option value="Baixa">Baixa</option>
             </select>
             <DatePicker value={taskDueDate} onChange={setTaskDueDate} />
-            <Button onClick={addTask}>Adicionar</Button>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setTaskDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={addTask}>Salvar</Button>
+            </div>
           </div>
+        </DialogContent>
+      </Dialog>
 
-          <div className="space-y-2">
-            {sortedTasks.map((task) => (
-              <div key={task.id} className="rounded-md border border-slate-800 p-2">
-                <p className="text-sm text-slate-100">
-                  {task.title}{" "}
-                  <span className="text-xs text-slate-500">({formatDueLabel(task.due_date)})</span>
-                </p>
-              </div>
-            ))}
-            {sortedTasks.length === 0 ? <p className="text-sm text-slate-500">Sem tarefas neste contexto.</p> : null}
-          </div>
-        </CardContent>
-      </Card>
+      <TaskEditModal
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) setEditingTask(null);
+        }}
+        editableTask={
+          editingTask
+            ? {
+                task_type: "work",
+                task: {
+                  id: editingTask.id,
+                  title: editingTask.title,
+                  description: editingTask.description,
+                  priority: editingTask.priority,
+                  due_date: editingTask.due_date,
+                },
+              }
+            : null
+        }
+        onSaved={() => {
+          if (hubId) {
+            loadHubData(hubId);
+          }
+        }}
+      />
     </AppShell>
   );
 }

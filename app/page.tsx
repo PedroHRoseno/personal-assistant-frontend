@@ -133,7 +133,7 @@ export default function HomePage() {
         method: "PATCH",
         body: JSON.stringify(
           task.task_type === "diaria"
-            ? { is_completed_today: !task.is_completed_today, status: !task.is_completed_today ? "concluido" : "backlog" }
+            ? { is_completed_today: true, status: "concluido" }
             : { status: "concluido" },
         ),
       });

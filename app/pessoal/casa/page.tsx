@@ -151,16 +151,20 @@ export default function CasaPage() {
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
-                  className="h-7 px-2 text-xs text-slate-300"
+                  className="min-h-[44px] min-w-[44px] px-2 text-xs text-slate-300"
                   onClick={() => {
                     setEditingTask(task);
                     setTaskModalOpen(true);
                   }}
                 >
-                  <Pencil size={14} />
+                  <Pencil size={16} />
                 </Button>
-                <Button variant="ghost" className="h-7 px-2 text-xs text-rose-400" onClick={() => removeTask(task.id)}>
-                  <Trash2 size={14} />
+                <Button
+                  variant="ghost"
+                  className="min-h-[44px] min-w-[44px] px-2 text-xs text-rose-400"
+                  onClick={() => removeTask(task.id)}
+                >
+                  <Trash2 size={16} />
                 </Button>
               </div>
             }
@@ -280,6 +284,9 @@ export default function CasaPage() {
                   description: editingTask.description,
                   priority: editingTask.priority,
                   due_date: editingTask.due_date,
+                  zone: editingTask.zone,
+                  task_type: editingTask.task_type,
+                  recurrence_interval: editingTask.recurrence_interval,
                 },
               }
             : null

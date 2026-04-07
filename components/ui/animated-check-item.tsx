@@ -38,15 +38,15 @@ export function AnimatedCheckItem({
           type="button"
           onClick={onToggle}
           className={cn(
-            "mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full border transition",
+            "mt-0.5 inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border transition",
             checked
               ? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
               : "border-slate-600 bg-slate-950 text-slate-500",
           )}
-          whileTap={{ scale: 0.86 }}
+          whileTap={{ scale: 0.92 }}
           transition={{ type: "spring", stiffness: 480, damping: 18 }}
         >
-          <Check size={14} />
+          <Check size={18} />
         </motion.button>
 
         <div>

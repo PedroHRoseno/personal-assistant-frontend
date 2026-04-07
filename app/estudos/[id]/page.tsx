@@ -519,6 +519,7 @@ export default function CourseDetailsPage() {
                   description: editingTask.description,
                   priority: editingTask.priority,
                   due_date: editingTask.due_date,
+                  course_id: editingTask.course_id,
                 },
               }
             : null

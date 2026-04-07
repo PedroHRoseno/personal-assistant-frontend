@@ -357,6 +357,9 @@ export default function WorkHubPage() {
                   description: editingTask.description,
                   priority: editingTask.priority,
                   due_date: editingTask.due_date,
+                  context: editingTask.context,
+                  label: editingTask.label,
+                  context_id: editingTask.context_id,
                 },
               }
             : null

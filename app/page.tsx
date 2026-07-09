@@ -5,6 +5,7 @@ import { Briefcase, GraduationCap, Home as HomeIcon, Pencil } from "lucide-react
 import { DayPicker } from "react-day-picker";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { PomodoroTimer } from "@/components/pomodoro/pomodoro-timer";
 import { CalendarDayTaskRow } from "@/components/tasks/calendar-day-task-row";
 import { KanbanTaskCard } from "@/components/tasks/kanban-task-card";
 import { TaskEditModal } from "@/components/tasks/task-edit-modal";
@@ -277,7 +278,7 @@ export default function HomePage() {
       <header className="mb-6">
         <h2 className="text-2xl font-bold text-slate-100 md:text-3xl">Central de Execução</h2>
         <p className="mt-2 text-sm text-slate-400 md:text-base">
-          Kanban unificado no topo e calendário de vencimentos abaixo.
+          Kanban unificado, pomodoro de foco e calendário de vencimentos.
         </p>
       </header>
 
@@ -334,37 +335,41 @@ export default function HomePage() {
             </div>
           </div>
 
-          <Card className="h-fit xl:sticky xl:top-4">
-            <CardHeader>
-              <CardTitle>Checklist Rápido Pessoal/Casa</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {quickHomeChecklist.map((task) => (
-                <AnimatedCheckItem
-                  key={task.id}
-                  checked={false}
-                  onToggle={() => toggleHomeChecklistTask(task)}
-                  title={task.title}
-                  actions={
-                    <div className="flex items-center gap-1">
-                      <Badge className="border-amber-700/60 bg-amber-500/10 text-amber-300">{task.task_type}</Badge>
-                      <button
-                        type="button"
-                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-slate-700 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-indigo-300"
-                        onClick={() => void openHomeChecklistEditor(task.id)}
-                      >
-                        <Pencil size={14} />
-                        <span className="sr-only">Editar</span>
-                      </button>
-                    </div>
-                  }
-                />
-              ))}
-              {quickHomeChecklist.length === 0 ? (
-                <p className="text-sm text-slate-500">Nenhuma pendência do lar para hoje.</p>
-              ) : null}
-            </CardContent>
-          </Card>
+          <div className="space-y-4 xl:sticky xl:top-4">
+            <PomodoroTimer />
+
+            <Card className="h-fit">
+              <CardHeader>
+                <CardTitle>Checklist Rápido Pessoal/Casa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {quickHomeChecklist.map((task) => (
+                  <AnimatedCheckItem
+                    key={task.id}
+                    checked={false}
+                    onToggle={() => toggleHomeChecklistTask(task)}
+                    title={task.title}
+                    actions={
+                      <div className="flex items-center gap-1">
+                        <Badge className="border-amber-700/60 bg-amber-500/10 text-amber-300">{task.task_type}</Badge>
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md border border-slate-700 text-xs text-slate-300 transition hover:border-indigo-500 hover:text-indigo-300"
+                          onClick={() => void openHomeChecklistEditor(task.id)}
+                        >
+                          <Pencil size={14} />
+                          <span className="sr-only">Editar</span>
+                        </button>
+                      </div>
+                    }
+                  />
+                ))}
+                {quickHomeChecklist.length === 0 ? (
+                  <p className="text-sm text-slate-500">Nenhuma pendência do lar para hoje.</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </section>
 

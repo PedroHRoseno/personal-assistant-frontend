@@ -116,3 +116,18 @@ export type TodayTask = {
   created_at: string;
   updated_at: string;
 };
+
+export type PomodoroSession = {
+  id: number;
+  focus_minutes: number;
+  break_minutes: number;
+  session_day: string;
+  completed_at: string;
+};
+
+export type PomodoroDailySummary = {
+  day: string;
+  count: number;
+  total_focus_minutes: number;
+  sessions: PomodoroSession[];
+};

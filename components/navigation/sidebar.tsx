@@ -1,32 +1,10 @@
 "use client";
 
-import { BookOpenCheck, ClipboardList, Home, KanbanSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
 
-const links = [
-  {
-    label: "Home",
-    href: "/",
-    icon: Home,
-  },
-  {
-    label: "Trabalho",
-    href: "/trabalho",
-    icon: KanbanSquare,
-  },
-  {
-    label: "Estudos",
-    href: "/estudos",
-    icon: BookOpenCheck,
-  },
-  {
-    label: "Pessoal/Casa",
-    href: "/pessoal/casa",
-    icon: ClipboardList,
-  },
-];
+import { isNavLinkActive, navLinks } from "@/lib/nav-links";
+import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -39,21 +17,24 @@ export function Sidebar() {
       </div>
 
       <nav className="space-y-2">
-        {links.map(({ label, href, icon: Icon }) => (
-          <Link
-            key={label}
-            href={href}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-              pathname === href || pathname.startsWith(`${href}/`)
-                ? "bg-slate-800 text-slate-100"
-                : "text-slate-400 hover:bg-slate-900 hover:text-slate-100",
-            )}
-          >
-            <Icon size={18} />
-            <span>{label}</span>
-          </Link>
-        ))}
+        {navLinks.map(({ label, href, icon: Icon }) => {
+          const active = isNavLinkActive(pathname, href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                active
+                  ? "bg-slate-800 text-slate-100"
+                  : "text-slate-400 hover:bg-slate-900 hover:text-slate-100",
+              )}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </aside>
   );
